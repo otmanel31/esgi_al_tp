@@ -1,0 +1,32 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Diagramme C4 - Niveau 2 (Conteneurs) - Plateforme IoT
+
+Person(client, "Client", "Utilisateur de la plateforme IoT")
+Person(admin, "Administrateur", "Gère les capteurs")
+
+System_Boundary(iot_system, "Système IoT Microservices") {
+    Container(sensor_mgmt, "Sensor Management Service", "Quarkus :8081", "Gestion CRUD des capteurs et de leurs métadonnées")
+    Container(data_ingestion, "Data Ingestion Service", "Quarkus :8082", "Réception, validation et orchestration des données capteurs")
+    Container(timeseries, "TimeSeries Service", "Quarkus :8083", "Stockage et consultation de l'historique des mesures")
+    Container(command, "Command Service", "Quarkus :8084", "Envoi asynchrone de commandes vers les capteurs distants")
+    ContainerDb(broker_sim, "Broker Simulator", "Quarkus Scheduler", "Simulation d'un broker de messages (MQTT/RabbitMQ)")
+}
+
+Rel(client, sensor_mgmt, "Consulte les capteurs", "REST/JSON")
+Rel(client, timeseries, "Consulte l'historique", "REST/JSON")
+Rel(client, command, "Envoie des commandes", "REST/JSON (async)")
+Rel(admin, sensor_mgmt, "Gère les capteurs", "REST/JSON (CRUD)")
+
+Rel(broker_sim, data_ingestion, "Envoie données capteurs", "REST POST")
+Rel(data_ingestion, sensor_mgmt, "Vérifie existence capteur", "REST GET")
+Rel(data_ingestion, timeseries, "Stocke les données", "REST POST")
+Rel(data_ingestion, sensor_mgmt, "MAJ dernière communication", "REST PUT")
+
+Rel(command, sensor_mgmt, "Vérifie capteur actif", "REST GET", "Optional")
+
+SHOW_LEGEND()
+@enduml

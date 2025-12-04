@@ -1,0 +1,52 @@
+@startuml
+title Flux d'ingestion de données - Architecture Microservices
+
+actor "Capteur IoT" as sensor
+participant "Broker\nSimulator" as broker
+participant "Data Ingestion\nService\n:8082" as ingestion
+participant "Sensor Mgmt\nService\n:8081" as mgmt
+participant "TimeSeries\nService\n:8083" as ts
+
+== Génération périodique (toutes les 10s) ==
+broker -> broker: Générer données aléatoires
+broker -> ingestion: POST /api/ingest\n{sensorId, value, unit}
+activate ingestion
+
+== Validation ==
+ingestion -> mgmt: GET /api/sensors/{id}
+activate mgmt
+mgmt -> mgmt: Recherche en mémoire
+mgmt --> ingestion: 200 OK\nSensor{id, name, type, status}
+deactivate mgmt
+
+alt Capteur existe et actif
+    ingestion -> ingestion: Valider données\n(plage de valeurs selon type)
+    
+    == Stockage ==
+    ingestion -> ts: POST /api/data\n{sensorId, timestamp, value, unit}
+    activate ts
+    ts -> ts: Stocker en mémoire\n(Map<SensorId, List<Data>>)
+    ts --> ingestion: 201 Created
+    deactivate ts
+    
+    == Mise à jour métadonnées ==
+    ingestion -> mgmt: PUT /api/sensors/{id}/communication\n{timestamp: now()}
+    activate mgmt
+    mgmt -> mgmt: MAJ lastCommunication\nstatus = ACTIVE
+    mgmt --> ingestion: 200 OK
+    deactivate mgmt
+    
+    ingestion --> broker: 200 OK
+    note right: Donnée traitée avec succès
+    
+else Capteur inexistant
+    ingestion --> broker: 404 Not Found\n"Capteur inconnu"
+    
+else Valeur invalide
+    ingestion -> mgmt: PUT /api/sensors/{id}\n{status: ERROR}
+    ingestion --> broker: 400 Bad Request\n"Valeur hors limites"
+end
+
+deactivate ingestion
+
+@enduml

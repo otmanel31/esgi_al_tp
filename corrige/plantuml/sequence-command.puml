@@ -1,0 +1,43 @@
+@startuml
+title Flux de commande asynchrone - Architecture Microservices
+
+actor "Client" as client
+participant "Command Service\n:8084" as cmd
+participant "Thread Pool" as pool
+participant "Command Store\n(in-memory)" as store
+participant "Capteur distant\n(simulé)" as sensor
+
+== Envoi de commande (non-bloquant) ==
+client -> cmd: POST /api/commands\n{sensorId: "TEMP-001", command: "READ_VALUE"}
+activate cmd
+
+cmd -> cmd: Valider requête
+cmd -> store: Créer commande\nid=UUID, status=PENDING
+cmd -> pool: CompletableFuture.runAsync()\nprocessCommand(command)
+activate pool
+
+cmd --> client: 202 Accepted\nLocation: /api/commands/{id}\n{commandId, status: "PENDING"}
+deactivate cmd
+note right of client: Client reçoit immédiatement\nune réponse (non bloqué)
+
+== Traitement asynchrone (dans thread séparé) ==
+pool -> sensor: Envoyer commande\n(simulation 2-5s)
+activate sensor
+note right: Thread.sleep(2000-5000)\nSimulation réseau + traitement
+sensor --> pool: Réponse\n(80% succès, 20% échec)
+deactivate sensor
+
+pool -> store: Mettre à jour commande\nstatus=SUCCESS/FAILED\nresponse="Valeur: 23.5°C"
+deactivate pool
+
+== Polling du client (quelques secondes plus tard) ==
+client -> cmd: GET /api/commands/{id}
+activate cmd
+cmd -> store: Récupérer commande
+store --> cmd: Command{id, status, response}
+cmd --> client: 200 OK\n{id, sensorId, command, status: "SUCCESS",\nresponse: "Valeur: 23.5°C", sentAt}
+deactivate cmd
+
+note left of client: Client obtient le résultat\nvia polling périodique
+
+@enduml
